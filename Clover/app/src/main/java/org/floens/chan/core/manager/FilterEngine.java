@@ -219,7 +219,12 @@ public class FilterEngine {
                 return false;
             }
         } else {
-            return text.equals(filter.pattern);
+            // Non-regex fallback: plain text does a case-insensitive contains check.
+            // This is only reached when matchRegex=false is explicitly passed (e.g. from
+            // the pattern preview test). For all normal filter evaluation, isRegex=true
+            // on every FilterType so the branch above always runs.
+            return !TextUtils.isEmpty(filter.pattern)
+                    && text.toLowerCase().contains(filter.pattern.toLowerCase());
         }
     }
 

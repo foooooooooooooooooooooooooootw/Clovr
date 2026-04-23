@@ -115,6 +115,9 @@ public class ImageViewerPresenter implements MultiImageView.Callback, ViewPager.
         exiting = true;
 
         PostImage postImage = images.get(selectedPosition);
+        // Always pause video on exit regardless of type — prevents audio playing
+        // during the exit transition and after the viewer is closed.
+        callback.pauseVideo(postImage);
         if (postImage.type == PostImage.Type.MOVIE) {
             // VideoView doesn't work with invisible visibility
             callback.setImageMode(postImage, MultiImageView.Mode.LOWRES, true);
@@ -200,6 +203,11 @@ public class ImageViewerPresenter implements MultiImageView.Callback, ViewPager.
     }
 
     private void onPageSwipedTo(int position) {
+        // Pause any video that was playing on the page we just left.
+        for (PostImage other : getOther(position)) {
+            callback.pauseVideo(other);
+        }
+
         // Reset volume icon.
         // If it has audio, we'll know after it is loaded.
         callback.showVolumeMenuItem(false, true);
@@ -430,6 +438,8 @@ public class ImageViewerPresenter implements MultiImageView.Callback, ViewPager.
         void setPagerItems(List<PostImage> images, int initialIndex);
 
         void setImageMode(PostImage postImage, MultiImageView.Mode mode, boolean center);
+
+        void pauseVideo(PostImage postImage);
 
         void setVolume(PostImage postImage, boolean muted);
 

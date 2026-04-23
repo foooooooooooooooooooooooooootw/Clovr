@@ -458,7 +458,13 @@ public class Chan4 extends SiteBase {
 
     public enum CaptchaType implements OptionSettingItem {
         V2JS("v2js"),
-        V2NOJS("v2nojs");
+        V2NOJS("v2nojs"),
+        /**
+         * Loads the reCAPTCHA widget in a dedicated WebView, same as V2JS but
+         * uses a larger layout that is easier to interact with on small screens.
+         * Token is captured via a JS bridge — no full page load.
+         */
+        V2_WEBVIEW("v2webview");
 
         String name;
 
@@ -499,7 +505,7 @@ public class Chan4 extends SiteBase {
                 SiteSetting.forOption(
                         captchaType,
                         "Captcha type",
-                        Arrays.asList("Javascript", "Noscript"))
+                        Arrays.asList("Javascript", "Noscript (broken)", "WebView widget"))
         );
     }
 

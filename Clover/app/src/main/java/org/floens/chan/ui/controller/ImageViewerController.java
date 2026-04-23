@@ -259,6 +259,11 @@ public class ImageViewerController extends Controller implements ImageViewerPres
         ((ImageViewerAdapter) pager.getAdapter()).setVolume(postImage, muted);
     }
 
+    @Override
+    public void pauseVideo(PostImage postImage) {
+        ((ImageViewerAdapter) pager.getAdapter()).pauseVideo(postImage);
+    }
+
     public MultiImageView.Mode getImageMode(PostImage postImage) {
         return ((ImageViewerAdapter) pager.getAdapter()).getMode(postImage);
     }

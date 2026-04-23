@@ -36,6 +36,7 @@ import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -68,6 +69,7 @@ import static org.floens.chan.utils.AndroidUtils.getString;
 
 public class FilterLayout extends LinearLayout implements View.OnClickListener {
     private TextView typeText;
+    private Button regexBuilderButton;
     private TextView boardsSelector;
     private TextView pattern;
     private TextView patternPreview;
@@ -145,6 +147,8 @@ public class FilterLayout extends LinearLayout implements View.OnClickListener {
         theme().helpDrawable.apply(help);
         help.setOnClickListener(this);
         colorContainer = findViewById(R.id.color_container);
+        regexBuilderButton = findViewById(R.id.regex_builder_button);
+        regexBuilderButton.setOnClickListener(this);
         colorContainer.setOnClickListener(this);
         colorPreview = findViewById(R.id.color_preview);
 
@@ -320,6 +324,8 @@ public class FilterLayout extends LinearLayout implements View.OnClickListener {
                     .setMessage(message)
                     .setPositiveButton(R.string.ok, null)
                     .show();
+        } else if (v == regexBuilderButton) {
+            showRegexBuilder();
         } else if (v == colorContainer) {
             final ColorPickerView colorPickerView = new ColorPickerView(getContext());
             colorPickerView.setColor(filter.color);
@@ -338,6 +344,89 @@ public class FilterLayout extends LinearLayout implements View.OnClickListener {
                     .show();
             dialog.getWindow().setLayout(dp(300), dp(300));
         }
+    }
+
+    private void showRegexBuilder() {
+        // Inflate a simple view with an EditText for the word and checkboxes for options
+        android.widget.LinearLayout root = new android.widget.LinearLayout(getContext());
+        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        root.setPadding(pad, pad, pad, pad);
+
+        android.widget.EditText wordInput = new android.widget.EditText(getContext());
+        wordInput.setHint(getString(R.string.filter_regex_builder_hint));
+        wordInput.setSingleLine(true);
+        root.addView(wordInput);
+
+        android.widget.CheckBox cbCaseInsensitive = new android.widget.CheckBox(getContext());
+        cbCaseInsensitive.setText(getString(R.string.filter_regex_case_insensitive));
+        cbCaseInsensitive.setChecked(true);
+        root.addView(cbCaseInsensitive);
+
+        android.widget.CheckBox cbWholeWord = new android.widget.CheckBox(getContext());
+        cbWholeWord.setText(getString(R.string.filter_regex_whole_word));
+        cbWholeWord.setChecked(false);
+        root.addView(cbWholeWord);
+
+        android.widget.CheckBox cbStartsWith = new android.widget.CheckBox(getContext());
+        cbStartsWith.setText(getString(R.string.filter_regex_starts_with));
+        cbStartsWith.setChecked(false);
+        root.addView(cbStartsWith);
+
+        android.widget.CheckBox cbEndsWith = new android.widget.CheckBox(getContext());
+        cbEndsWith.setText(getString(R.string.filter_regex_ends_with));
+        cbEndsWith.setChecked(false);
+        root.addView(cbEndsWith);
+
+        android.widget.CheckBox cbMultiWord = new android.widget.CheckBox(getContext());
+        cbMultiWord.setText(getString(R.string.filter_regex_match_any_word));
+        cbMultiWord.setChecked(false);
+        root.addView(cbMultiWord);
+
+        new androidx.appcompat.app.AlertDialog.Builder(getContext())
+                .setTitle(R.string.filter_regex_builder)
+                .setView(root)
+                .setPositiveButton(R.string.ok, (dialog, which) -> {
+                    String word = wordInput.getText().toString().trim();
+                    if (android.text.TextUtils.isEmpty(word)) return;
+
+                    // Escape regex metacharacters in the word(s)
+                    String escaped = word.replaceAll("([.\\*+?\\[\\]{}()|^$-])", "\\\\$1");
+
+                    StringBuilder regex = new StringBuilder();
+
+                    if (cbMultiWord.isChecked()) {
+                        // Split on spaces; escape each word individually then join with |
+                        String[] words = word.split("\\s+");
+                        regex.append("(");
+                        for (int i = 0; i < words.length; i++) {
+                            String escapedWord = words[i].replaceAll("([.\\*+?\\[\\]{}()|^$-])", "\\\\$1");
+                            if (i > 0) regex.append("|");
+                            if (cbWholeWord.isChecked()) regex.append("\\b");
+                            if (cbStartsWith.isChecked() && i == 0) regex.append("^");
+                            regex.append(escapedWord);
+                            if (cbEndsWith.isChecked() && i == words.length - 1) regex.append("$");
+                            if (cbWholeWord.isChecked()) regex.append("\\b");
+                        }
+                        regex.append(")");
+                    } else {
+                        if (cbStartsWith.isChecked()) regex.append("^");
+                        if (cbWholeWord.isChecked()) regex.append("\\b");
+                        regex.append(escaped);
+                        if (cbWholeWord.isChecked()) regex.append("\\b");
+                        if (cbEndsWith.isChecked()) regex.append("$");
+                    }
+
+                    String flags = cbCaseInsensitive.isChecked() ? "i" : "";
+                    String result = "/" + regex + "/" + flags;
+
+                    pattern.setText(result);
+                    filter.pattern = result;
+                    updateFilterValidity();
+                    updatePatternPreview();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     private void updateFilterValidity() {

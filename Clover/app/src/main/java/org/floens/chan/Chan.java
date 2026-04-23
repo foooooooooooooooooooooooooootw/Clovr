@@ -39,6 +39,7 @@ import org.floens.chan.ui.activity.StartActivity;
 import org.floens.chan.utils.AndroidUtils;
 import org.floens.chan.utils.LocaleUtils;
 import org.floens.chan.utils.Logger;
+import org.floens.chan.core.settings.ChanSettings;
 import org.floens.chan.utils.Time;
 
 import java.util.ArrayList;
@@ -64,6 +65,16 @@ public class Chan extends Application implements
 
     @Inject
     DatabaseManager databaseManager;
+
+    private void migrateThemePreference() {
+        // If the stored theme has no color suffix (old format like "yotsuba")
+        // reset it to our default with the green accent applied.
+        ChanSettings.ThemeColor current = ChanSettings.getThemeAndColor();
+        if (current.color == null || current.accentColor == null) {
+            ChanSettings.setThemeAndColor(
+                    new ChanSettings.ThemeColor("yotsuba", "green", "teal"));
+        }
+    }
 
     @Inject
     SiteService siteService;
@@ -109,6 +120,11 @@ public class Chan extends Application implements
         userAgent = createUserAgent();
 
         initializeGraph();
+
+        // Theme migration: the original Clover stored the theme as a bare name
+        // ("yotsuba") without color info. If the pref still looks like the old
+        // format (no comma), reset it to our new default so the green accent applies.
+        migrateThemePreference();
 
         siteService.initialize();
         boardManager.initialize();

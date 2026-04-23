@@ -135,6 +135,8 @@ public class ChanSettings {
 
     public static final BooleanSetting videoDefaultMuted;
     public static final BooleanSetting videoAutoLoop;
+    // Speed multiplier used while the user holds down on a video (stored as tenths: 20 = 2.0x)
+    public static final IntegerSetting videoHoldSpeed;
 
     public static final BooleanSetting watchEnabled;
     public static final BooleanSetting watchCountdown;
@@ -167,7 +169,7 @@ public class ChanSettings {
 
         forceEnglishLocale = new BooleanSetting(p, "preference_force_english_locale", false);
 
-        theme = new StringSetting(p, "preference_theme", "yotsuba");
+        theme = new StringSetting(p, "preference_theme", "yotsuba,green,teal");
 
         layoutMode = new OptionsSetting<>(p, "preference_layout_mode", LayoutMode.class, LayoutMode.AUTO);
 
@@ -217,6 +219,7 @@ public class ChanSettings {
 //        saveBoardFolder = new BooleanSetting(p, "preference_save_subboard", false);
         videoDefaultMuted = new BooleanSetting(p, "preference_video_default_muted", true);
         videoAutoLoop = new BooleanSetting(p, "preference_video_loop", true);
+        videoHoldSpeed = new IntegerSetting(p, "preference_video_hold_speed", 20); // default 2.0x
 
         watchEnabled = new BooleanSetting(p, "preference_watch_enabled", false);
         watchEnabled.addCallback((setting, value) ->

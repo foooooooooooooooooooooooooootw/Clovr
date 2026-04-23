@@ -137,10 +137,8 @@ public class StartActivity extends AppCompatActivity implements
         // Do this after setContentView, or the decor creating will reset the background to a default non-null drawable
         getWindow().setBackgroundDrawable(null);
 
-        NfcAdapter adapter = NfcAdapter.getDefaultAdapter(this);
-        if (adapter != null) {
-            adapter.setNdefPushMessageCallback(this, this);
-        }
+        // Android Beam (setNdefPushMessageCallback) was removed in API 29.
+        // NFC link-sharing via Beam is no longer supported on modern Android.
 
         setupFromStateOrFreshLaunch(savedInstanceState);
 

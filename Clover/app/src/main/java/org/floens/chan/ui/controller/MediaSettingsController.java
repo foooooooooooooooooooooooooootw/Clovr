@@ -36,6 +36,7 @@ import org.floens.chan.ui.settings.SettingsController;
 import org.floens.chan.ui.settings.SettingsGroup;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.inject.Inject;
@@ -152,6 +153,17 @@ public class MediaSettingsController extends SettingsController implements
             media.add(new BooleanSettingView(this, ChanSettings.videoUseExoplayer,
                     R.string.setting_video_exoplayer,
                     R.string.setting_video_exoplayer_description));
+
+            // Hold-to-speed-up multiplier (stored as tenths: 15 = 1.5x, 20 = 2.0x)
+            media.add(new ListSettingView<>(this,
+                    ChanSettings.videoHoldSpeed,
+                    getString(R.string.setting_video_hold_speed),
+                    new ListSettingView.Item[]{
+                            new ListSettingView.Item<>("1.5x", 15),
+                            new ListSettingView.Item<>("2x",   20),
+                            new ListSettingView.Item<>("2.5x", 25),
+                            new ListSettingView.Item<>("3x",   30),
+                    }));
 
             media.add(new BooleanSettingView(this,
                     ChanSettings.shareUrl,

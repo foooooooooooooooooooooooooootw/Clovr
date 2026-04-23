@@ -58,6 +58,12 @@ public class ImageViewerAdapter extends ViewPagerAdapter {
 
     @Override
     public void destroyItem(ViewGroup container, int position, Object object) {
+        // Cancel any in-progress loads and release the ExoPlayer before the view
+        // is detached. Without this the audio track keeps playing after a swipe.
+        if (object instanceof MultiImageView) {
+            ((MultiImageView) object).cancelLoad();
+        }
+
         super.destroyItem(container, position, object);
 
         //noinspection SuspiciousMethodCalls
@@ -95,6 +101,13 @@ public class ImageViewerAdapter extends ViewPagerAdapter {
         // It must be loaded, or the user is not able to click the menu item.
         MultiImageView view = find(postImage);
         view.setVolume(muted);
+    }
+
+    public void pauseVideo(PostImage postImage) {
+        MultiImageView view = find(postImage);
+        if (view != null) {
+            view.pauseVideoPlayback();
+        }
     }
 
     public MultiImageView.Mode getMode(PostImage postImage) {

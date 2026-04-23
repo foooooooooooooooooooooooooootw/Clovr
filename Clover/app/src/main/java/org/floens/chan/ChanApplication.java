@@ -17,30 +17,18 @@
  */
 package org.floens.chan;
 
-import org.floens.chan.core.settings.ChanSettings;
-
-import io.sentry.android.core.SentryAndroid;
-
 /**
  * The ChanApplication wrapping our Chan application.
  * For historical reasons the main application class needs to be 'org.floens.chan.ChanApplication'.
+ *
+ * Sentry crash reporting has been removed. To re-add it, uncomment the sentry dependency in
+ * app/build.gradle, add your own DSN to the CRASH_REPORT_TOKEN build config field, and restore
+ * the SentryAndroid.init() calls here.
  */
 public class ChanApplication extends Chan {
     @Override
     public void onCreate() {
         super.onCreate();
-
         initialize();
-
-        if (!BuildConfig.DEVELOPER_MODE && ChanSettings.isCrashReportingEnabled()) {
-            SentryAndroid.init(this, options -> {
-                options.setDsn(BuildConfig.CRASH_REPORT_TOKEN +
-                        "?release=" + BuildConfig.VERSION_NAME +
-                        "&environment=" + BuildConfig.FLAVOR +
-                        "&extra=commit=" + BuildConfig.BUILD_HASH);
-            });
-        } else {
-            SentryAndroid.init(this, options -> options.setDsn(""));
-        }
     }
 }
