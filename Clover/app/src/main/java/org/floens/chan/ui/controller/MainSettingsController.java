@@ -25,10 +25,11 @@ import android.text.TextUtils;
 import android.view.View;
 import android.widget.Toast;
 
-import org.floens.chan.BuildConfig;
 import org.floens.chan.R;
 import org.floens.chan.core.presenter.SettingsPresenter;
 import org.floens.chan.core.settings.ChanSettings;
+import org.floens.chan.ui.activity.StartActivity;
+import org.floens.chan.ui.settings.BooleanSettingView;
 import org.floens.chan.ui.settings.LinkSettingView;
 import org.floens.chan.ui.settings.SettingView;
 import org.floens.chan.ui.settings.SettingsController;
@@ -45,9 +46,11 @@ public class MainSettingsController extends SettingsController implements Settin
     private SettingsPresenter presenter;
 
     private LinkSettingView watchLink;
+    private int clickCount;
     private SettingView developerView;
     private LinkSettingView sitesSetting;
     private LinkSettingView filtersSetting;
+    private SettingView crashReportSetting;
 
     public MainSettingsController(Context context) {
         super(context);
@@ -108,6 +111,10 @@ public class MainSettingsController extends SettingsController implements Settin
     @Override
     public void onPreferenceChange(SettingView item) {
         super.onPreferenceChange(item);
+        if (item == crashReportSetting) {
+            Toast.makeText(context, R.string.settings_crash_reporting_toggle_notice,
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void populatePreferences() {
@@ -153,17 +160,13 @@ public class MainSettingsController extends SettingsController implements Settin
     private void setupAboutGroup() {
         SettingsGroup about = new SettingsGroup(R.string.settings_group_about);
 
-        setupVersionSetting(about);
+        final String version = setupVersionSetting(about);
 
-        // Source code link
-        about.add(new LinkSettingView(this,
-                R.string.settings_about_source, R.string.settings_about_source_description,
-                v -> AndroidUtils.openLink(getString(R.string.settings_about_source_url))));
+        setupUpdateSetting(about);
 
-        // Report a bug
-        about.add(new LinkSettingView(this,
-                R.string.settings_about_report, R.string.settings_about_report_description,
-                v -> AndroidUtils.openLink(getString(R.string.settings_about_report_url))));
+        setupCrashReportingSetting(about);
+
+        setupExtraAboutSettings(about, version);
 
         about.add(new LinkSettingView(this,
                 R.string.settings_about_license, R.string.settings_about_license_description,
@@ -234,7 +237,7 @@ public class MainSettingsController extends SettingsController implements Settin
         }
     }
 
-    private void setupVersionSetting(SettingsGroup about) {
+    private String setupVersionSetting(SettingsGroup about) {
         String version = "";
         try {
             version = context.getPackageManager()
@@ -242,32 +245,39 @@ public class MainSettingsController extends SettingsController implements Settin
         } catch (PackageManager.NameNotFoundException ignored) {
         }
 
-        String buildHash = BuildConfig.BUILD_HASH;
-        String flavor = getString(R.string.app_flavor_name);
-        String displayVersion = version
-                + (buildHash.equals("unknown") ? "" : " (" + buildHash + ")")
-                + (TextUtils.isEmpty(flavor) ? "" : " " + flavor);
-
-        // Tapping the version row 5 times unlocks the developer menu (logs, DB reset).
-        // To bump the version shown here, change versionName in app/build.gradle.
+        String userVersion = version + " " + getString(R.string.app_flavor_name);
         about.add(new LinkSettingView(this,
-                getString(R.string.app_name), displayVersion,
+                getString(R.string.app_name), userVersion,
                 v -> {
-                    if (developerView != null) {
-                        int count = (Integer) (v.getTag() != null ? v.getTag() : 0);
-                        v.setTag(count + 1);
-                        if ((count + 1) % 5 == 0) {
-                            boolean developer = !ChanSettings.developer.get();
-                            ChanSettings.developer.set(developer);
-                            Toast.makeText(context,
-                                    (developer ? "Developer options enabled" : "Developer options disabled"),
-                                    Toast.LENGTH_SHORT).show();
-                            developerView.view.setVisibility(developer ? View.VISIBLE : View.GONE);
-                        }
+                    if ((++clickCount) % 5 == 0) {
+                        boolean developer = !ChanSettings.developer.get();
+
+                        ChanSettings.developer.set(developer);
+
+                        Toast.makeText(context, (developer ? "Enabled" : "Disabled") +
+                                " developer options", Toast.LENGTH_LONG).show();
+
+                        developerView.view.setVisibility(developer ? View.VISIBLE : View.GONE);
                     }
                 }));
+
+        return version;
     }
 
-    // Update checking and crash reporting removed - configure your own endpoints
-    // in build.gradle before re-enabling these.
+    private void setupUpdateSetting(SettingsGroup about) {
+        if (((StartActivity) context).getVersionHandler().isUpdatingAvailable()) {
+            about.add(new LinkSettingView(this,
+                    R.string.settings_update_check, 0,
+                    v -> ((StartActivity) context).getVersionHandler().manualUpdateCheck()));
+        }
+    }
+
+    private void setupCrashReportingSetting(SettingsGroup about) {
+        if (ChanSettings.isCrashReportingAvailable()) {
+            crashReportSetting = about.add(new BooleanSettingView(this,
+                    ChanSettings.crashReporting,
+                    R.string.settings_crash_reporting,
+                    R.string.settings_crash_reporting_description));
+        }
+    }
 }

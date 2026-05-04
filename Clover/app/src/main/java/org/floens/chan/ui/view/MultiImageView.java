@@ -28,37 +28,32 @@ import android.media.MediaPlayer;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.MediaController;
 import android.widget.Toast;
 import android.widget.VideoView;
-import android.view.MotionEvent;
-import android.os.Handler;
-import android.os.Looper;
-import android.widget.ImageButton;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import androidx.media3.ui.DefaultTimeBar;
-import androidx.media3.ui.TimeBar;
 
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.OnLifecycleEvent;
-import androidx.media3.common.AudioAttributes;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.PlaybackParameters;
-import androidx.media3.common.Player;
-import androidx.media3.common.util.UnstableApi;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.ui.PlayerView;
 
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.ImageLoader;
 import com.android.volley.toolbox.ImageLoader.ImageContainer;
 import com.davemorrissey.labs.subscaleview.ImageSource;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.Player;
+import androidx.media3.common.Tracks;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.ui.PlayerView;
 
 import org.floens.chan.R;
 import org.floens.chan.core.cache.FileCache;
@@ -82,18 +77,23 @@ import pl.droidsonroids.gif.GifImageView;
 
 import static org.floens.chan.Chan.inject;
 
-@UnstableApi
 public class MultiImageView extends FrameLayout implements View.OnClickListener, LifecycleObserver {
     public enum Mode {
         UNLOADED, LOWRES, BIGIMAGE, GIF, MOVIE, OTHER
     }
 
     private static final String TAG = "MultiImageView";
+    //for checkstyle to not be dumb about local final vars
     private static final int BACKGROUND_COLOR = Color.argb(255, 211, 217, 241);
 
-    @Inject FileCache fileCache;
-    @Inject ImageLoader imageLoader;
-    @Inject UserAgentProvider userAgent;
+    @Inject
+    FileCache fileCache;
+
+    @Inject
+    ImageLoader imageLoader;
+
+    @Inject
+    UserAgentProvider userAgent;
 
     private ImageView playView;
 
@@ -107,47 +107,13 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
     private FileCacheDownloader gifRequest;
     private FileCacheDownloader videoRequest;
 
-    // Legacy VideoView path (non-ExoPlayer)
     private VideoView videoView;
+    private PlayerView exoVideoView;
     private boolean videoError = false;
     private MediaPlayer mediaPlayer;
-
-    // Media3 ExoPlayer path
-    private PlayerView exoVideoView;
     private ExoPlayer exoPlayer;
 
     private boolean backgroundToggle;
-
-    // Hold-to-speed: gesture detector for long-press on the ExoPlayer view
-    private boolean holdSpeedActive = false;
-
-    // Custom video control strip (lives below the PlayerView surface)
-    private LinearLayout exoControlStrip;
-    private ImageButton exoPlayPause;
-    private DefaultTimeBar exoTimeBar;
-    private TextView exoPosition;
-    private ImageButton exoRewind;
-    private ImageButton exoForward;
-    private final Handler uiHandler = new Handler(Looper.getMainLooper());
-    private final Runnable positionUpdater = new Runnable() {
-        @Override public void run() {
-            if (exoPlayer != null && exoTimeBar != null) {
-                long pos = exoPlayer.getCurrentPosition();
-                long dur = exoPlayer.getDuration();
-                long buf = exoPlayer.getBufferedPosition();
-                exoTimeBar.setPosition(pos);
-                exoTimeBar.setDuration(dur > 0 ? dur : 0);
-                exoTimeBar.setBufferedPosition(buf);
-                exoPosition.setText(formatMs(pos) + " / " + formatMs(dur > 0 ? dur : 0));
-            }
-            uiHandler.postDelayed(this, 250);
-        }
-    };
-
-    private static String formatMs(long ms) {
-        long s = ms / 1000;
-        return String.format(java.util.Locale.US, "%d:%02d", s / 60, s % 60);
-    }
 
     public MultiImageView(Context context) {
         this(context, null);
@@ -159,19 +125,21 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     public MultiImageView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+
         inject(this);
+
         setOnClickListener(this);
 
         playView = new ImageView(getContext());
         playView.setVisibility(View.GONE);
         playView.setImageResource(R.drawable.ic_play_circle_outline_white_48dp);
-        addView(playView, new FrameLayout.LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+        addView(playView, new FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER));
     }
 
     public void bindPostImage(PostImage postImage, Callback callback) {
         this.postImage = postImage;
         this.callback = callback;
+
         playView.setVisibility(postImage.type == PostImage.Type.MOVIE ? View.VISIBLE : View.GONE);
     }
 
@@ -181,26 +149,31 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     public void setMode(final Mode newMode, boolean center) {
         if (this.mode != newMode) {
+//            Logger.test("Changing mode from " + this.mode + " to " + newMode + " for " + postImage.thumbnailUrl);
             this.mode = newMode;
-            AndroidUtils.waitForMeasure(this, view -> {
-                switch (newMode) {
-                    case LOWRES:
-                        setThumbnail(postImage.getThumbnailUrl().toString(), center);
-                        break;
-                    case BIGIMAGE:
-                        setBigImage(postImage.imageUrl.toString());
-                        break;
-                    case GIF:
-                        setGif(postImage.imageUrl.toString());
-                        break;
-                    case MOVIE:
-                        setVideo(postImage.imageUrl.toString());
-                        break;
-                    case OTHER:
-                        setOther(postImage.imageUrl.toString());
-                        break;
+
+            AndroidUtils.waitForMeasure(this, new AndroidUtils.OnMeasuredCallback() {
+                @Override
+                public boolean onMeasured(View view) {
+                    switch (newMode) {
+                        case LOWRES:
+                            setThumbnail(postImage.getThumbnailUrl().toString(), center);
+                            break;
+                        case BIGIMAGE:
+                            setBigImage(postImage.imageUrl.toString());
+                            break;
+                        case GIF:
+                            setGif(postImage.imageUrl.toString());
+                            break;
+                        case MOVIE:
+                            setVideo(postImage.imageUrl.toString());
+                            break;
+                        case OTHER:
+                            setOther(postImage.imageUrl.toString());
+                            break;
+                    }
+                    return true;
                 }
-                return true;
             });
         }
     }
@@ -214,31 +187,29 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
     }
 
     public CustomScaleImageView findScaleImageView() {
+        CustomScaleImageView bigImage = null;
         for (int i = 0; i < getChildCount(); i++) {
             if (getChildAt(i) instanceof CustomScaleImageView) {
-                return (CustomScaleImageView) getChildAt(i);
+                bigImage = (CustomScaleImageView) getChildAt(i);
             }
         }
-        return null;
+        return bigImage;
     }
 
     public GifImageView findGifImageView() {
+        GifImageView gif = null;
         for (int i = 0; i < getChildCount(); i++) {
             if (getChildAt(i) instanceof GifImageView) {
-                return (GifImageView) getChildAt(i);
+                gif = (GifImageView) getChildAt(i);
             }
         }
-        return null;
+        return gif;
     }
 
     @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-    private void onActivityPause() {
-        pauseVideoPlayback();
-    }
-
-    /** Stop playback without releasing the player — called when swiping away. */
-    public void pauseVideoPlayback() {
+    private void pauseVideo() {
         if (exoPlayer != null) {
+            exoPlayer.setPlaybackParameters(PlaybackParameters.DEFAULT);
             exoPlayer.setPlayWhenReady(false);
         } else if (videoView != null) {
             videoView.pause();
@@ -274,16 +245,22 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     private void setThumbnail(String thumbnailUrl, boolean center) {
         if (getWidth() == 0 || getHeight() == 0) {
-            Logger.e(TAG, "getWidth() or getHeight() returned 0, not loading thumbnail");
+            Logger.e(TAG, "getWidth() or getHeight() returned 0, not loading");
             return;
         }
-        if (thumbnailRequest != null) return;
 
+        if (thumbnailRequest != null) {
+            return;
+        }
+
+        // Also use volley for the thumbnails
         thumbnailRequest = imageLoader.get(thumbnailUrl, new ImageLoader.ImageListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
                 thumbnailRequest = null;
-                if (center) onError(error);
+                if (center) {
+                    onError(error);
+                }
             }
 
             @Override
@@ -292,12 +269,16 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                 if (response.getBitmap() != null && (!hasContent || mode == Mode.LOWRES)) {
                     ImageView thumbnail = new ImageView(getContext());
                     thumbnail.setImageBitmap(response.getBitmap());
+
                     onModeLoaded(Mode.LOWRES, thumbnail);
                 }
             }
         }, getWidth(), getHeight());
 
-        if (thumbnailRequest != null && thumbnailRequest.getBitmap() != null) {
+        if (thumbnailRequest.getBitmap() != null) {
+            // Request was immediate and thumbnailRequest was first set to null in onResponse, and then set to the container
+            // when the method returned
+            // Still set it to null here
             thumbnailRequest = null;
         }
     }
@@ -307,19 +288,38 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
             Logger.e(TAG, "getWidth() or getHeight() returned 0, not loading big image");
             return;
         }
-        if (bigImageRequest != null) return;
+
+        if (bigImageRequest != null) {
+            return;
+        }
 
         callback.showProgress(this, true);
         bigImageRequest = fileCache.downloadFile(imageUrl, new FileCacheListener() {
-            @Override public void onProgress(long downloaded, long total) {
+            @Override
+            public void onProgress(long downloaded, long total) {
                 callback.onProgress(MultiImageView.this, downloaded, total);
             }
-            @Override public void onSuccess(File file) { setBigImageFile(file); }
-            @Override public void onFail(boolean notFound) {
-                if (notFound) onNotFoundError(); else onError(new Exception());
+
+            @Override
+            public void onSuccess(File file) {
+                setBigImageFile(file);
             }
-            @Override public void onCancel() {}
-            @Override public void onEnd() {
+
+            @Override
+            public void onFail(boolean notFound) {
+                if (notFound) {
+                    onNotFoundError();
+                } else {
+                    onError(new Exception());
+                }
+            }
+
+            @Override
+            public void onCancel() {
+            }
+
+            @Override
+            public void onEnd() {
                 bigImageRequest = null;
                 callback.showProgress(MultiImageView.this, false);
             }
@@ -332,24 +332,43 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     private void setGif(String gifUrl) {
         if (getWidth() == 0 || getHeight() == 0) {
-            Logger.e(TAG, "getWidth() or getHeight() returned 0, not loading gif");
+            Logger.e(TAG, "getWidth() or getHeight() returned 0, not loading");
             return;
         }
-        if (gifRequest != null) return;
+
+        if (gifRequest != null) {
+            return;
+        }
 
         callback.showProgress(this, true);
         gifRequest = fileCache.downloadFile(gifUrl, new FileCacheListener() {
-            @Override public void onProgress(long downloaded, long total) {
+            @Override
+            public void onProgress(long downloaded, long total) {
                 callback.onProgress(MultiImageView.this, downloaded, total);
             }
-            @Override public void onSuccess(File file) {
-                if (!hasContent || mode == Mode.GIF) setGifFile(file);
+
+            @Override
+            public void onSuccess(File file) {
+                if (!hasContent || mode == Mode.GIF) {
+                    setGifFile(file);
+                }
             }
-            @Override public void onFail(boolean notFound) {
-                if (notFound) onNotFoundError(); else onError(new Exception());
+
+            @Override
+            public void onFail(boolean notFound) {
+                if (notFound) {
+                    onNotFoundError();
+                } else {
+                    onError(new Exception());
+                }
             }
-            @Override public void onCancel() {}
-            @Override public void onEnd() {
+
+            @Override
+            public void onCancel() {
+            }
+
+            @Override
+            public void onEnd() {
                 gifRequest = null;
                 callback.showProgress(MultiImageView.this, false);
             }
@@ -360,6 +379,10 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         GifDrawable drawable;
         try {
             drawable = new GifDrawable(file.getAbsolutePath());
+
+            // For single frame gifs, use the scaling image instead
+            // The region decoder doesn't work for gifs, so we unfortunately
+            // have to use the more memory intensive non tiling mode.
             if (drawable.getNumberOfFrames() == 1) {
                 drawable.recycle();
                 setBitImageFileInternal(file, false, Mode.GIF);
@@ -382,21 +405,39 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
     }
 
     private void setVideo(String videoUrl) {
-        if (videoRequest != null) return;
+        if (videoRequest != null) {
+            return;
+        }
 
         callback.showProgress(this, true);
         videoRequest = fileCache.downloadFile(videoUrl, new FileCacheListener() {
-            @Override public void onProgress(long downloaded, long total) {
+            @Override
+            public void onProgress(long downloaded, long total) {
                 callback.onProgress(MultiImageView.this, downloaded, total);
             }
-            @Override public void onSuccess(File file) {
-                if (!hasContent || mode == Mode.MOVIE) setVideoFile(file);
+
+            @Override
+            public void onSuccess(File file) {
+                if (!hasContent || mode == Mode.MOVIE) {
+                    setVideoFile(file);
+                }
             }
-            @Override public void onFail(boolean notFound) {
-                if (notFound) onNotFoundError(); else onError(new Exception());
+
+            @Override
+            public void onFail(boolean notFound) {
+                if (notFound) {
+                    onNotFoundError();
+                } else {
+                    onError(new Exception());
+                }
             }
-            @Override public void onCancel() {}
-            @Override public void onEnd() {
+
+            @Override
+            public void onCancel() {
+            }
+
+            @Override
+            public void onEnd() {
                 videoRequest = null;
                 callback.showProgress(MultiImageView.this, false);
             }
@@ -409,231 +450,243 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     private void setVideoFile(final File file) {
         if (ChanSettings.videoOpenExternal.get()) {
-            // Open in system video player
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(FileCacheProvider.getUriForFile(file), "video/*");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
             AndroidUtils.openIntent(intent);
-            onModeLoaded(Mode.MOVIE, null);
 
+            onModeLoaded(Mode.MOVIE, videoView);
         } else if (ChanSettings.videoUseExoplayer.get()) {
-            // ── Build player ────────────────────────────────────────────────
-            exoPlayer = new ExoPlayer.Builder(getContext())
-                    .setSeekForwardIncrementMs(5_000)
-                    .setSeekBackIncrementMs(5_000)
-                    .build();
-            exoPlayer.setRepeatMode(ChanSettings.videoAutoLoop.get()
-                    ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
-
-            // ── Video surface: PlayerView with controller completely disabled ──
-            // The built-in controller overlays the video and cannot be reliably
-            // positioned below the frame. We build our own strip instead.
             exoVideoView = new PlayerView(getContext());
-            exoVideoView.setUseController(false);
+            exoVideoView.setUseController(false); // disable built-in overlay controls
+
+            exoPlayer = new ExoPlayer.Builder(getContext())
+                    .setRenderersFactory(
+                            new DefaultRenderersFactory(getContext())
+                                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                    )
+                    .build();
             exoVideoView.setPlayer(exoPlayer);
 
-            // ── Custom control strip ─────────────────────────────────────────
-            // Lives in a separate LinearLayout anchored below the video surface.
-            // Nothing overlaps the video content.
-            int dp48 = (int) (48 * getResources().getDisplayMetrics().density);
-            int dp4  = (int) ( 4 * getResources().getDisplayMetrics().density);
+            exoPlayer.setRepeatMode(ChanSettings.videoAutoLoop.get() ?
+                    Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
 
-            // ── Buttons row: [left spacer] [⏮ ⏯ ⏭ centered] [right: timestamp] ──
-            // Three-column trick: weight-1 left pad | wrap_content centre | weight-1 right
-            // guarantees the three buttons sit exactly in the middle regardless of
-            // how wide the timestamp is.
-            LinearLayout buttonsRow = new LinearLayout(getContext());
-            buttonsRow.setOrientation(LinearLayout.HORIZONTAL);
-            buttonsRow.setBackgroundColor(0xCC000000);
-            buttonsRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            buttonsRow.setPadding(dp4, 0, dp4, 0);
-
-            // Left weight spacer
-            android.widget.Space leftSpacer = new android.widget.Space(getContext());
-            buttonsRow.addView(leftSpacer,
-                    new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
-
-            // Centre: three buttons grouped
-            LinearLayout btnGroup = new LinearLayout(getContext());
-            btnGroup.setOrientation(LinearLayout.HORIZONTAL);
-            btnGroup.setGravity(android.view.Gravity.CENTER);
-
-            exoRewind = new ImageButton(getContext());
-            exoRewind.setImageResource(android.R.drawable.ic_media_rew);
-            exoRewind.setBackgroundColor(0x00000000);
-            exoRewind.setOnClickListener(vv -> {
-                if (exoPlayer != null)
-                    exoPlayer.seekTo(Math.max(0, exoPlayer.getCurrentPosition() - 5_000));
-            });
-
-            exoPlayPause = new ImageButton(getContext());
-            exoPlayPause.setImageResource(android.R.drawable.ic_media_pause);
-            exoPlayPause.setBackgroundColor(0x00000000);
-            exoPlayPause.setOnClickListener(vv -> {
-                if (exoPlayer != null)
-                    exoPlayer.setPlayWhenReady(!exoPlayer.getPlayWhenReady());
-            });
-
-            exoForward = new ImageButton(getContext());
-            exoForward.setImageResource(android.R.drawable.ic_media_ff);
-            exoForward.setBackgroundColor(0x00000000);
-            exoForward.setOnClickListener(vv -> {
-                if (exoPlayer != null) {
-                    long dur = exoPlayer.getDuration();
-                    long target = exoPlayer.getCurrentPosition() + 5_000;
-                    exoPlayer.seekTo(dur > 0 ? Math.min(target, dur) : target);
-                }
-            });
-
-            btnGroup.addView(exoRewind);
-            btnGroup.addView(exoPlayPause);
-            btnGroup.addView(exoForward);
-            buttonsRow.addView(btnGroup,
-                    new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                            LinearLayout.LayoutParams.MATCH_PARENT));
-
-            // Right weight spacer + timestamp right-aligned
-            LinearLayout rightSide = new LinearLayout(getContext());
-            rightSide.setOrientation(LinearLayout.HORIZONTAL);
-            rightSide.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.END);
-
-            exoPosition = new TextView(getContext());
-            exoPosition.setTextColor(0xFFFFFFFF);
-            exoPosition.setTextSize(11f);
-            exoPosition.setPadding(dp4, 0, dp4, 0);
-            exoPosition.setText("0:00 / 0:00");
-            rightSide.addView(exoPosition);
-
-            buttonsRow.addView(rightSide,
-                    new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
-
-            // ── Seekbar row ──────────────────────────────────────────────────
-            LinearLayout seekRow = new LinearLayout(getContext());
-            seekRow.setOrientation(LinearLayout.HORIZONTAL);
-            seekRow.setBackgroundColor(0xCC000000);
-            seekRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            seekRow.setPadding(dp4, 0, dp4, dp4);
-
-            exoTimeBar = new DefaultTimeBar(getContext(), null);
-            LinearLayout.LayoutParams timeBarParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT);
-            exoTimeBar.setLayoutParams(timeBarParams);
-            exoTimeBar.addListener(new TimeBar.OnScrubListener() {
-                @Override public void onScrubStart(TimeBar bar, long position) {
-                    uiHandler.removeCallbacks(positionUpdater);
-                }
-                @Override public void onScrubMove(TimeBar bar, long position) {
-                    if (exoPosition != null) exoPosition.setText(formatMs(position) + " / "
-                            + formatMs(exoPlayer != null && exoPlayer.getDuration() > 0
-                            ? exoPlayer.getDuration() : 0));
-                }
-                @Override public void onScrubStop(TimeBar bar, long position, boolean cancelled) {
-                    if (!cancelled && exoPlayer != null) exoPlayer.seekTo(position);
-                    uiHandler.post(positionUpdater);
-                }
-            });
-            seekRow.addView(exoTimeBar);
-
-            // exoControlStrip is kept as a reference for cleanup; points to buttonsRow
-            exoControlStrip = buttonsRow;
-
-            // ── Touch overlay: transparent view over the video surface ────────
-            // Instant speed-up on finger-down, instant restore on finger-up.
-            // No delay — the overlay owns the full touch sequence.
-            View touchOverlay = new View(getContext());
-            touchOverlay.setBackgroundColor(0x00000000);
-            touchOverlay.setOnTouchListener((v, event) -> {
-                int action = event.getActionMasked();
-                if (action == MotionEvent.ACTION_DOWN) {
-                    if (exoPlayer != null && exoPlayer.isPlaying()) {
-                        float speed = ChanSettings.videoHoldSpeed.get() / 10f;
-                        exoPlayer.setPlaybackParameters(new PlaybackParameters(speed, 1.0f));
-                        holdSpeedActive = true;
-                    }
-                    return true; // claim the sequence so UP is guaranteed
-                } else if (action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL) {
-                    if (holdSpeedActive) {
-                        if (exoPlayer != null) {
-                            exoPlayer.setPlaybackParameters(PlaybackParameters.DEFAULT);
-                        }
-                        holdSpeedActive = false;
-                    }
-                }
-                return true;
-            });
-
-            // ── Outer container: [video+overlay] → buttons → seekbar ────────────
-            FrameLayout videoFrame = new FrameLayout(getContext());
-            videoFrame.addView(exoVideoView, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-            videoFrame.addView(touchOverlay, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-            LinearLayout videoContainer = new LinearLayout(getContext());
-            videoContainer.setOrientation(LinearLayout.VERTICAL);
-
-            LinearLayout.LayoutParams surfaceParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-            videoContainer.addView(videoFrame, surfaceParams);
-            videoContainer.addView(buttonsRow, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, dp48));
-            videoContainer.addView(seekRow, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT));
-
-            // ── Player listener ──────────────────────────────────────────────
-            exoPlayer.addListener(new Player.Listener() {
-                @Override
-                public void onPlaybackStateChanged(int playbackState) {
-                    if (playbackState == Player.STATE_READY) {
-                        callback.onVideoLoaded(MultiImageView.this);
-                        if (exoPlayer.getAudioFormat() != null) {
-                            callback.onAudioLoaded(MultiImageView.this);
-                        }
-                        // Show/hide skip buttons for very short clips
-                        long dur = exoPlayer.getDuration();
-                        boolean showSkip = dur < 0 || dur > 10_000;
-                        exoRewind.setVisibility(showSkip ? VISIBLE : GONE);
-                        exoForward.setVisibility(showSkip ? VISIBLE : GONE);
-                        exoTimeBar.setDuration(dur > 0 ? dur : 0);
-                        uiHandler.post(positionUpdater);
-                    }
-                }
-
-                @Override
-                public void onIsPlayingChanged(boolean isPlaying) {
-                    if (exoPlayPause != null) {
-                        exoPlayPause.setImageResource(isPlaying
-                                ? android.R.drawable.ic_media_pause
-                                : android.R.drawable.ic_media_play);
-                    }
-                }
-
-                @Override
-                public void onPlayerError(PlaybackException error) {
-                    Logger.e(TAG, "ExoPlayer error: " + error.getErrorCodeName()
-                            + " (" + error.errorCode + ")", error);
-                    onVideoError();
-                }
-            });
-
-
-
-
+            exoPlayer.setAudioAttributes(
+                    new AudioAttributes.Builder()
+                            .setUsage(C.USAGE_MEDIA)
+                            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                            .build(),
+                    /* handleAudioFocus= */ false);
 
             MediaItem mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(file));
             exoPlayer.setMediaItem(mediaItem);
             exoPlayer.prepare();
+
+            exoPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onTracksChanged(Tracks tracks) {
+                    if (tracks.containsType(C.TRACK_TYPE_AUDIO)) {
+                        callback.onAudioLoaded(MultiImageView.this);
+                    }
+                }
+            });
+
+            // ---- Control bar: two rows inside a vertical LinearLayout ----
+            // Row 1: [skip back] [play/pause] [skip forward]  — centred
+            // Row 2: seekbar + time text
+            android.widget.LinearLayout controlBar = new android.widget.LinearLayout(getContext());
+            controlBar.setOrientation(android.widget.LinearLayout.VERTICAL);
+            controlBar.setBackgroundColor(0xCC000000);
+            controlBar.setPadding(dp(12), dp(6), dp(12), dp(10));
+
+            // -- Row 1: transport buttons --
+            android.widget.LinearLayout btnRow = new android.widget.LinearLayout(getContext());
+            btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            btnRow.setGravity(Gravity.CENTER);
+            android.widget.LinearLayout.LayoutParams btnRowParams =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            btnRow.setLayoutParams(btnRowParams);
+
+            android.widget.ImageButton skipBackBtn = new android.widget.ImageButton(getContext());
+            skipBackBtn.setBackground(null);
+            skipBackBtn.setImageResource(android.R.drawable.ic_media_rew);
+            skipBackBtn.setColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
+            skipBackBtn.setPadding(dp(16), dp(4), dp(16), dp(4));
+
+            android.widget.ImageButton playPauseBtn = new android.widget.ImageButton(getContext());
+            playPauseBtn.setBackground(null);
+            playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+            playPauseBtn.setColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
+            playPauseBtn.setPadding(dp(16), dp(4), dp(16), dp(4));
+
+            android.widget.ImageButton skipFwdBtn = new android.widget.ImageButton(getContext());
+            skipFwdBtn.setBackground(null);
+            skipFwdBtn.setImageResource(android.R.drawable.ic_media_ff);
+            skipFwdBtn.setColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
+            skipFwdBtn.setPadding(dp(16), dp(4), dp(16), dp(4));
+
+            btnRow.addView(skipBackBtn);
+            btnRow.addView(playPauseBtn);
+            btnRow.addView(skipFwdBtn);
+
+            // -- Row 2: seekbar + time --
+            android.widget.LinearLayout seekRow = new android.widget.LinearLayout(getContext());
+            seekRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            seekRow.setGravity(Gravity.CENTER_VERTICAL);
+            android.widget.LinearLayout.LayoutParams seekRowParams =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            seekRowParams.topMargin = dp(2);
+            seekRow.setLayoutParams(seekRowParams);
+
+            android.widget.SeekBar seekBar = new android.widget.SeekBar(getContext());
+            seekBar.setMax(1000);
+            android.widget.LinearLayout.LayoutParams seekBarParams =
+                    new android.widget.LinearLayout.LayoutParams(0,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            seekBarParams.setMargins(0, 0, dp(8), 0);
+            seekBar.setLayoutParams(seekBarParams);
+
+            android.widget.TextView timeText = new android.widget.TextView(getContext());
+            timeText.setTextColor(0xFFFFFFFF);
+            timeText.setTextSize(11f);
+            timeText.setText("0:00 / 0:00");
+            timeText.setMinWidth(dp(80));
+            timeText.setGravity(Gravity.END);
+
+            seekRow.addView(seekBar);
+            seekRow.addView(timeText);
+
+            controlBar.addView(btnRow);
+            controlBar.addView(seekRow);
+
+            // -- Button logic --
+            // Skip amount: 10% of duration, min 5s, max 30s
+            java.util.concurrent.atomic.AtomicBoolean userSeeking =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            playPauseBtn.setOnClickListener(v -> {
+                if (exoPlayer.isPlaying()) {
+                    exoPlayer.pause();
+                    playPauseBtn.setImageResource(android.R.drawable.ic_media_play);
+                } else {
+                    exoPlayer.play();
+                    playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+                }
+            });
+
+            skipBackBtn.setOnClickListener(v -> {
+                long dur = exoPlayer.getDuration();
+                long skip = dur > 0 ? Math.min(30000, Math.max(5000, dur / 10)) : 10000;
+                exoPlayer.seekTo(Math.max(0, exoPlayer.getCurrentPosition() - skip));
+            });
+
+            skipFwdBtn.setOnClickListener(v -> {
+                long dur = exoPlayer.getDuration();
+                long skip = dur > 0 ? Math.min(30000, Math.max(5000, dur / 10)) : 10000;
+                exoPlayer.seekTo(Math.min(dur, exoPlayer.getCurrentPosition() + skip));
+            });
+
+            seekBar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(android.widget.SeekBar sb, int progress, boolean fromUser) {
+                    if (fromUser && exoPlayer.getDuration() > 0) {
+                        exoPlayer.seekTo(progress * exoPlayer.getDuration() / 1000);
+                    }
+                }
+                @Override
+                public void onStartTrackingTouch(android.widget.SeekBar sb) {
+                    userSeeking.set(true);
+                }
+                @Override
+                public void onStopTrackingTouch(android.widget.SeekBar sb) {
+                    userSeeking.set(false);
+                }
+            });
+
+            // Periodic UI updater
+            final android.os.Handler seekHandler =
+                    new android.os.Handler(android.os.Looper.getMainLooper());
+            final Runnable seekUpdater = new Runnable() {
+                @Override
+                public void run() {
+                    if (exoPlayer != null && !userSeeking.get()) {
+                        long dur = exoPlayer.getDuration();
+                        long pos = exoPlayer.getCurrentPosition();
+                        if (dur > 0) {
+                            seekBar.setProgress((int) (pos * 1000 / dur));
+                        }
+                        timeText.setText(formatTime(pos) + " / " + formatTime(Math.max(0, dur)));
+                    }
+                    seekHandler.postDelayed(this, 200);
+                }
+            };
+            seekHandler.post(seekUpdater);
+
+            exoPlayer.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_ENDED) {
+                        playPauseBtn.setImageResource(android.R.drawable.ic_media_play);
+                    }
+                    if (state == Player.STATE_READY) {
+                        long dur = exoPlayer.getDuration();
+                        timeText.setText(formatTime(0) + " / " + formatTime(Math.max(0, dur)));
+                    }
+                }
+                @Override
+                public void onIsPlayingChanged(boolean isPlaying) {
+                    playPauseBtn.setImageResource(isPlaying
+                            ? android.R.drawable.ic_media_pause
+                            : android.R.drawable.ic_media_play);
+                    if (!isPlaying) seekHandler.removeCallbacks(seekUpdater);
+                    else seekHandler.post(seekUpdater);
+                }
+            });
+
+            addView(exoVideoView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+
             exoPlayer.setPlayWhenReady(true);
 
-            addView(videoContainer);
-            onModeLoaded(Mode.MOVIE, videoContainer);
+            // Long-press on video (not buttons) to speed up
+            exoVideoView.setOnTouchListener((v, event) -> {
+                // Don't trigger speed-up if touch is in the control bar area
+                float barTop = getHeight() - controlBar.getHeight();
+                if (event.getY() >= barTop) return false;
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    float holdSpeed = ChanSettings.videoHoldSpeed.get().getSpeed();
+                    exoPlayer.setPlaybackParameters(new PlaybackParameters(holdSpeed));
+                }
+                return false;
+            });
 
+            // Always reset speed on finger lift, regardless of which child consumed the touch
+            setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_UP
+                        || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                    if (exoPlayer != null) {
+                        exoPlayer.setPlaybackParameters(PlaybackParameters.DEFAULT);
+                    }
+                }
+                return false;
+            });
+
+            onModeLoaded(Mode.MOVIE, exoVideoView);
+
+            // Add control bar AFTER onModeLoaded so it isn't removed by view cleanup
+            FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT,
+                    LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            addView(controlBar, barParams);
+            callback.onVideoLoaded(this);
         } else {
-            // --- Legacy VideoView path (system MediaPlayer) ---
             Context proxyContext = new NoMusicServiceCommandContext(getContext());
+
             videoView = new VideoView(proxyContext);
             videoView.setZOrderOnTop(true);
             videoView.setMediaController(new MediaController(getContext()));
@@ -642,8 +695,7 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                 videoView.setAudioFocusRequest(AudioManager.AUDIOFOCUS_NONE);
             }
 
-            addView(videoView, 0, new LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER));
+            addView(videoView, 0, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER));
 
             videoView.setOnPreparedListener(mp -> {
                 mediaPlayer = mp;
@@ -657,31 +709,52 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
             });
 
             videoView.setOnErrorListener((mp, what, extra) -> {
-                Logger.e(TAG, "VideoView error: what=" + what + " extra=" + extra);
                 onVideoError();
+
                 return true;
             });
 
             videoView.setVideoPath(file.getAbsolutePath());
+
             try {
                 videoView.start();
             } catch (IllegalStateException e) {
-                Logger.e(TAG, "VideoView start error", e);
+                Logger.e(TAG, "Video view start error", e);
                 onVideoError();
             }
         }
     }
 
-    private boolean hasMediaPlayerAudioTracks(MediaPlayer mp) {
+    private int dp(float dp) {
+        return (int) (dp * getContext().getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private String formatTime(long ms) {
+        if (ms < 0) return "0:00";
+        long seconds = ms / 1000;
+        long minutes = seconds / 60;
+        seconds = seconds % 60;
+        return minutes + ":" + String.format("%02d", seconds);
+    }
+
+    private boolean hasMediaPlayerAudioTracks(MediaPlayer mediaPlayer) {
         try {
-            for (MediaPlayer.TrackInfo track : mp.getTrackInfo()) {
-                if (track.getTrackType() == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO) {
-                    return true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                for (MediaPlayer.TrackInfo trackInfo : mediaPlayer.getTrackInfo()) {
+                    if (trackInfo.getTrackType() == MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO) {
+                        return true;
+                    }
                 }
+
+                return false;
+            } else {
+                // It'll just show the icon without doing anything. Remove when 4.0 is dropped.
+                return true;
             }
-            return false;
         } catch (RuntimeException e) {
-            // Some Samsung devices throw RuntimeException from getTrackInfo()
+            // getTrackInfo() raises an IllegalStateException on some devices.
+            // Samsung even throws a RuntimeException.
+            // Return a default value.
             return true;
         }
     }
@@ -698,10 +771,9 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         mediaPlayer = null;
     }
 
-    private void cleanupVideo(PlayerView playerView) {
-        uiHandler.removeCallbacks(positionUpdater);
-        if (playerView.getPlayer() != null) {
-            playerView.getPlayer().release();
+    private void cleanupVideo(PlayerView videoView) {
+        if (videoView.getPlayer() != null) {
+            videoView.getPlayer().release();
         }
     }
 
@@ -725,13 +797,16 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         image.setOnClickListener(MultiImageView.this);
         addView(image, 0, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         image.setCallback(new CustomScaleImageView.Callback() {
-            @Override public void onReady() {
+            @Override
+            public void onReady() {
                 if (!hasContent || mode == forMode) {
                     callback.showProgress(MultiImageView.this, false);
                     onModeLoaded(Mode.BIGIMAGE, image);
                 }
             }
-            @Override public void onError(boolean wasInitial) {
+
+            @Override
+            public void onError(boolean wasInitial) {
                 onBigImageError(wasInitial);
             }
         });
@@ -761,24 +836,33 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         }
     }
 
-    public void cancelLoad() {
-        if (thumbnailRequest != null) { thumbnailRequest.cancelRequest(); thumbnailRequest = null; }
-        if (bigImageRequest != null) { bigImageRequest.cancel(); bigImageRequest = null; }
-        if (gifRequest != null) { gifRequest.cancel(); gifRequest = null; }
-        if (videoRequest != null) { videoRequest.cancel(); videoRequest = null; }
-        uiHandler.removeCallbacks(positionUpdater);
+    private void cancelLoad() {
+        if (thumbnailRequest != null) {
+            thumbnailRequest.cancelRequest();
+            thumbnailRequest = null;
+        }
+        if (bigImageRequest != null) {
+            bigImageRequest.cancel();
+            bigImageRequest = null;
+        }
+        if (gifRequest != null) {
+            gifRequest.cancel();
+            gifRequest = null;
+        }
+        if (videoRequest != null) {
+            videoRequest.cancel();
+            videoRequest = null;
+        }
         if (exoPlayer != null) {
+            // ExoPlayer will keep loading resources if we don't release it here.
             exoPlayer.release();
             exoPlayer = null;
         }
-        exoControlStrip = null;
-        exoPlayPause = null;
-        exoTimeBar = null;
-        exoPosition = null;
     }
 
     private void onModeLoaded(Mode mode, View view) {
         if (view != null) {
+            // Remove all other views
             boolean alreadyAttached = false;
             for (int i = getChildCount() - 1; i >= 0; i--) {
                 View child = getChildAt(i);
@@ -789,12 +873,14 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                         } else if (child instanceof PlayerView) {
                             cleanupVideo((PlayerView) child);
                         }
+
                         removeViewAt(i);
                     } else {
                         alreadyAttached = true;
                     }
                 }
             }
+
             if (!alreadyAttached) {
                 addView(view, 0, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
             }
@@ -810,7 +896,7 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
             GifImageView gif = (GifImageView) child;
             if (gif.getDrawable() instanceof GifDrawable) {
                 GifDrawable drawable = (GifDrawable) gif.getDrawable();
-                if (drawable.getFrameByteCount() > 100 * 1024 * 1024) {
+                if (drawable.getFrameByteCount() > 100 * 1024 * 1024) { //max size from RecordingCanvas
                     onError(new Exception("Uncompressed GIF too large (>100MB)"));
                     return false;
                 }
@@ -821,23 +907,29 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
     public interface Callback {
         void onTap(MultiImageView multiImageView);
+
         void showProgress(MultiImageView multiImageView, boolean progress);
+
         void onProgress(MultiImageView multiImageView, long current, long total);
+
         void onVideoError(MultiImageView multiImageView);
+
         void onVideoLoaded(MultiImageView multiImageView);
+
         void onModeLoaded(MultiImageView multiImageView, Mode mode);
+
         void onAudioLoaded(MultiImageView multiImageView);
     }
 
-    /**
-     * Wraps the context to suppress music-service pause broadcasts that would
-     * interrupt other apps' audio when Clover starts a video.
-     */
     public static class NoMusicServiceCommandContext extends ContextWrapper {
-        public NoMusicServiceCommandContext(Context base) { super(base); }
+        public NoMusicServiceCommandContext(Context base) {
+            super(base);
+        }
 
         @Override
         public void sendBroadcast(Intent intent) {
+            // Only allow broadcasts when it's not a music service command
+            // Prevents pause intents from broadcasting
             if (!"com.android.music.musicservicecommand".equals(intent.getAction())) {
                 super.sendBroadcast(intent);
             }

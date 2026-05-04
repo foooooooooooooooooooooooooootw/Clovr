@@ -1,23 +1,22 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
-// Sentry mapping upload - only enabled when the properties file exists (on the build server).
+// This uploads the mapping files to sentry, only enabled when the properties file exists
+// (on the build server).
 project.ext.sentryMappingUploadingEnabled = file('sentry.properties').exists()
 
 buildscript {
     repositories {
         google()
-        mavenCentral()
+        jcenter()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
-        // Uncomment and configure with your own Sentry account if desired:
-        // classpath 'io.sentry:sentry-android-gradle-plugin:3.14.0'
     }
 }
 
 allprojects {
     repositories {
         google()
-        mavenCentral()
+        jcenter()
     }
 }

@@ -1,1 +1,2 @@
 include ':app'
+include ':decoder_vp9'

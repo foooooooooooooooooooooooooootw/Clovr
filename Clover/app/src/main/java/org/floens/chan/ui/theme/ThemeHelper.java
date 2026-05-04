@@ -63,17 +63,9 @@ public class ThemeHelper {
         themes.add(new DarkTheme("Neon", "neon", R.style.Chan_Theme_Neon, PrimaryColor.DARK));
         themes.add(new DarkTheme("Solarized Dark", "solarized_dark", R.style.Chan_Theme_SolarizedDark, PrimaryColor.ORANGE));
 
-        // Migration: old installs stored bare theme name with no color (e.g. "yotsuba").
-        // Upgrade them to yotsuba+green before reading the setting below.
-        ChanSettings.ThemeColor migCheck = ChanSettings.getThemeAndColor();
-        if (migCheck.color == null || migCheck.accentColor == null) {
-            ChanSettings.setThemeAndColor(
-                    new ChanSettings.ThemeColor("yotsuba", "green", "teal"));
-        }
-
         ChanSettings.ThemeColor settingTheme = ChanSettings.getThemeAndColor();
         for (Theme theme : themes) {
-            if (themeMatches(theme, settingTheme.theme)) {
+            if (theme.name.equals(settingTheme.theme)) {
                 patchTheme(theme, settingTheme);
                 break;
             }
@@ -92,7 +84,7 @@ public class ThemeHelper {
     public void updateCurrentTheme() {
         ChanSettings.ThemeColor settingTheme = ChanSettings.getThemeAndColor();
         for (Theme theme : themes) {
-            if (themeMatches(theme, settingTheme.theme)) {
+            if (theme.name.equals(settingTheme.theme)) {
                 this.theme = theme;
                 return;
             }
@@ -100,15 +92,6 @@ public class ThemeHelper {
 
         Logger.e(TAG, "No theme found for setting " + settingTheme + ", using the first one");
         theme = themes.get(0);
-    }
-
-    /**
-     * Match a theme by display name ("Yotsuba"), setting key ("yotsuba"), or
-     * case-insensitively — so old stored prefs always resolve correctly.
-     */
-    private boolean themeMatches(Theme theme, String stored) {
-        return theme.name.equals(stored)
-                || theme.name.equalsIgnoreCase(stored);
     }
 
     private void patchTheme(Theme theme, ChanSettings.ThemeColor setting) {

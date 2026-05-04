@@ -1,0 +1,4 @@
+/home/devuan/fe/ax/media/libraries/decoder_vp9/src/main/obj/local/x86_64/objs/cpufeatures/cpu-features.o: \
+  /home/devuan/fe/android-ndk-r27d/sources/android/cpufeatures/cpu-features.c \
+  /home/devuan/fe/android-ndk-r27d/sources/android/cpufeatures/cpu-features.h
+/home/devuan/fe/android-ndk-r27d/sources/android/cpufeatures/cpu-features.h:

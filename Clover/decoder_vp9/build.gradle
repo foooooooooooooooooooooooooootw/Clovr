@@ -1,0 +1,25 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 36
+    
+    defaultConfig {
+        minSdkVersion 23
+        targetSdkVersion 34
+    }
+
+    namespace 'androidx.media3.decoder.vp9'
+
+    sourceSets {
+        main {
+            jniLibs.srcDir 'src/main/jniLibs'
+            jni.srcDirs = []
+        }
+    }
+}
+
+dependencies {
+    api 'androidx.media3:media3-decoder:1.10.0'
+    implementation 'androidx.media3:media3-exoplayer:1.10.0'
+    implementation 'androidx.annotation:annotation:1.7.0'
+}

@@ -25,6 +25,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
+import androidx.multidex.MultiDexApplication;
 
 import org.codejargon.feather.Feather;
 import org.floens.chan.core.database.DatabaseManager;
@@ -32,6 +33,7 @@ import org.floens.chan.core.di.AppModule;
 import org.floens.chan.core.di.NetModule;
 import org.floens.chan.core.di.UserAgentProvider;
 import org.floens.chan.core.manager.BoardManager;
+import org.floens.chan.core.settings.ChanSettings;
 import org.floens.chan.core.site.SiteService;
 import org.floens.chan.ui.activity.ActivityResultHelper;
 import org.floens.chan.ui.activity.RuntimePermissionsHelper;
@@ -39,7 +41,6 @@ import org.floens.chan.ui.activity.StartActivity;
 import org.floens.chan.utils.AndroidUtils;
 import org.floens.chan.utils.LocaleUtils;
 import org.floens.chan.utils.Logger;
-import org.floens.chan.core.settings.ChanSettings;
 import org.floens.chan.utils.Time;
 
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ import javax.inject.Inject;
 import de.greenrobot.event.EventBus;
 
 @SuppressLint("Registered") // extended by ChanApplication, which is registered in the manifest.
-public class Chan extends Application implements
+public class Chan extends MultiDexApplication implements
         UserAgentProvider,
         ActivityResultHelper.ApplicationActivitiesProvider,
         Application.ActivityLifecycleCallbacks {
@@ -121,9 +122,6 @@ public class Chan extends Application implements
 
         initializeGraph();
 
-        // Theme migration: the original Clover stored the theme as a bare name
-        // ("yotsuba") without color info. If the pref still looks like the old
-        // format (no comma), reset it to our new default so the green accent applies.
         migrateThemePreference();
 
         siteService.initialize();

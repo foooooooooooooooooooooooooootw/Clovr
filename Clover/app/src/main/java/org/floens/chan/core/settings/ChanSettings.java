@@ -52,6 +52,30 @@ public class ChanSettings {
         }
     }
 
+    public enum VideoHoldSpeedMode implements OptionSettingItem {
+        SPEED_1_5("1.5x", 1.5f),
+        SPEED_2("2x", 2.0f),
+        SPEED_2_5("2.5x", 2.5f),
+        SPEED_3("3x", 3.0f);
+
+        String name;
+        float speed;
+
+        VideoHoldSpeedMode(String name, float speed) {
+            this.name = name;
+            this.speed = speed;
+        }
+
+        public float getSpeed() {
+            return speed;
+        }
+
+        @Override
+        public String getKey() {
+            return name;
+        }
+    }
+
     public enum PostViewMode implements OptionSettingItem {
         LIST("list"),
         CARD("grid");
@@ -135,8 +159,7 @@ public class ChanSettings {
 
     public static final BooleanSetting videoDefaultMuted;
     public static final BooleanSetting videoAutoLoop;
-    // Speed multiplier used while the user holds down on a video (stored as tenths: 20 = 2.0x)
-    public static final IntegerSetting videoHoldSpeed;
+    public static final OptionsSetting<VideoHoldSpeedMode> videoHoldSpeed;
 
     public static final BooleanSetting watchEnabled;
     public static final BooleanSetting watchCountdown;
@@ -169,7 +192,7 @@ public class ChanSettings {
 
         forceEnglishLocale = new BooleanSetting(p, "preference_force_english_locale", false);
 
-        theme = new StringSetting(p, "preference_theme", "yotsuba,green,teal");
+        theme = new StringSetting(p, "preference_theme", "yotsuba");
 
         layoutMode = new OptionsSetting<>(p, "preference_layout_mode", LayoutMode.class, LayoutMode.AUTO);
 
@@ -219,7 +242,7 @@ public class ChanSettings {
 //        saveBoardFolder = new BooleanSetting(p, "preference_save_subboard", false);
         videoDefaultMuted = new BooleanSetting(p, "preference_video_default_muted", true);
         videoAutoLoop = new BooleanSetting(p, "preference_video_loop", true);
-        videoHoldSpeed = new IntegerSetting(p, "preference_video_hold_speed", 20); // default 2.0x
+        videoHoldSpeed = new OptionsSetting<>(p, "preference_video_hold_speed", VideoHoldSpeedMode.class, VideoHoldSpeedMode.SPEED_2);
 
         watchEnabled = new BooleanSetting(p, "preference_watch_enabled", false);
         watchEnabled.addCallback((setting, value) ->

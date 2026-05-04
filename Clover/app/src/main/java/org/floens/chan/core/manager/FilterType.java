@@ -22,9 +22,9 @@ import java.util.List;
 
 public enum FilterType {
     TRIPCODE(0x1, false),
-    NAME(0x2, true),       // regex enabled: e.g. /^(Anonymous|anon)$/i
+    NAME(0x2, false),
     COMMENT(0x4, true),
-    ID(0x8, false),        
+    ID(0x8, false),
     SUBJECT(0x10, true),
     FILENAME(0x20, true);
 

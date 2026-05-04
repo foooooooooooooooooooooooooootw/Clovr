@@ -216,47 +216,30 @@ Re-enable this permission in the app settings if you permanently disabled it."</
     <string name="filter_help_title">Filter help</string>
     <string name="filter_help">
 <![CDATA[
-Filters match a pattern against a post field and hide, highlight, or remove matching posts.<br>
-<br>
-<h4>All filter types support three pattern modes:</h4>
+Filters act on a given pattern and a place to search the pattern.<br>
+If the pattern matches then the post can be hidden or highlighted.<br>
 
+<h4>For tripcodes, names and IDs:</h4>
 <p>
-<b>1. Word match (default)</b><br>
-<tt>foo bar</tt> matches any post containing <i>foo</i> or <i>bar</i> as whole words.<br>
-Use <tt>*</tt> as a wildcard: <tt>f*o</tt> matches <i>foo</i>, <i>foooo</i> but not <i>foobar</i>.<br>
+    It will match the given pattern exact.<br>
+    <tt>!Ep8pui8Vw2</tt> will match the tripcode <i>!Ep8pui8Vw2</i> but not <i>Ep8pu</i>.
 </p>
 
+<h4>For comments, subjects and filenames:</h4>
 <p>
-<b>2. Exact match</b><br>
-Wrap in quotes: <tt>\"foo bar\"</tt> matches the exact phrase <i>foo bar</i>.<br>
-</p>
-
-<p>
-<b>3. Regular expression</b><br>
-Wrap in slashes: <tt>/pattern/</tt> or <tt>/pattern/i</tt> (case-insensitive).<br>
-Examples:<br>
-<tt>/^>implying/</tt> — comment starts with &gt;implying<br>
-<tt>/^!Admin.*$/i</tt> — tripcode starting with !Admin (any case)<br>
-<tt>/^(Anonymous|anon)$/i</tt> — name is exactly Anonymous or anon<br>
-<tt>/^[A-F0-9]{8}$/</tt> — ID is exactly 8 hex characters<br>
-<tt>/\.(gif|webm)$/i</tt> — filename ends in .gif or .webm<br>
-</p>
-
-<p>
-<b>Note on exact matching for tripcodes, names and IDs:</b><br>
-Without slashes or quotes, these fields still match the input exactly (the whole field must equal your pattern).
-Use a regex if you want partial matching: <tt>/Admin/i</tt> matches any name containing Admin.
+    These filters are pattern based, and have three modes:<br>
+    <br>
+    1. The pattern <tt>foo bar</tt> will match text that has any of the words in it. It will match <i>foo</i> or <i>bar</i>, but not <i>foobar</i>.
+    Placing a * allows any character to be filled in: <tt>f*o</tt> will match both <i>foo</i>, <i>foooo</i> but not <i>foobar</i><br>
+    <br>
+    2. Quoting your pattern with <tt>\"</tt> like <tt>\"foo bar\"</tt> will match the text exactly.
+    <i>foo bar</i> matches but <i>foo</i> does not.<br>
+    <br>
+    3. Regular expressions. <tt>/^>implying/</tt> for example.
 </p>
 ]]>
     </string>
 
-    <string name="filter_regex_builder">Build regex…</string>
-    <string name="filter_regex_builder_hint">Enter word or phrase</string>
-    <string name="filter_regex_case_insensitive">Case insensitive (recommended)</string>
-    <string name="filter_regex_whole_word">Whole word only</string>
-    <string name="filter_regex_starts_with">Must start with this</string>
-    <string name="filter_regex_ends_with">Must end with this</string>
-    <string name="filter_regex_match_any_word">Match any word (space-separated alternatives)</string>
     <string name="filter_tripcode">Tripcode</string>
     <string name="filter_name">Name</string>
     <string name="filter_comment">Comment</string>
@@ -440,14 +423,6 @@ Enable \"Play videos with external player\" in the settings to play videos with 
 Crash reports do not collect any personally identifiable information."
     </string>
     <string name="settings_crash_reporting_toggle_notice">Setting will be applied on the next app start.</string>
-    <!-- TODO: Replace these URLs with your fork's actual repository and issue tracker -->
-    <string name="settings_about_source">Source code</string>
-    <string name="settings_about_source_description">View the source code on GitHub</string>
-    <string name="settings_about_source_url">https://github.com/YOUR_USERNAME/YOUR_REPO</string>
-    <string name="settings_about_report">Report a bug</string>
-    <string name="settings_about_report_description">Open an issue on GitHub</string>
-    <string name="settings_about_report_url">https://github.com/YOUR_USERNAME/YOUR_REPO/issues</string>
-
     <string name="settings_about_license">Released under the GNU GPLv3 license</string>
     <string name="settings_about_license_description">Tap to see license</string>
     <string name="settings_about_licenses">Open Source Licenses</string>
@@ -546,6 +521,8 @@ If disabled, save the image with the filename the uploader assigned."
     <string name="setting_video_open_external_description">Play videos in an external media player app</string>
     <string name="setting_video_exoplayer">Enable new ExoPlayer</string>
     <string name="setting_video_exoplayer_description">Use the new ExoPlayer for internal media player</string>
+    <string name="setting_video_hold_speed">Hold-to-speed-up multiplier</string>
+    <string name="setting_video_hold_speed_description">Playback speed when holding down on a video</string>
     <string name="setting_share_url">Share URL to image</string>
     <string name="setting_share_url_description">Share the URL to the image instead of the image itself</string>
     <string name="settings_reveal_image_spoilers">Reveal image spoilers</string>
@@ -561,8 +538,6 @@ If disabled, save the image with the filename the uploader assigned."
 
     <string name="setting_video_auto_load">Automatically load videos</string>
 
-    <string name="setting_video_hold_speed">Hold-to-speed multiplier</string>
-    <string name="setting_video_hold_speed_description">Playback speed while holding finger on video. Pitch is corrected automatically.</string>
     <string name="setting_video_auto_loop">Enable automatic video-looping</string>
     <string name="setting_video_auto_loop_description">Automatically loop video content</string>
 
