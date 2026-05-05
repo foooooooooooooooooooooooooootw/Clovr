@@ -162,9 +162,9 @@ public class MainSettingsController extends SettingsController implements Settin
 
         final String version = setupVersionSetting(about);
 
-        setupUpdateSetting(about);
+        // setupUpdateSetting(about);
 
-        setupCrashReportingSetting(about);
+        // setupCrashReportingSetting(about);
 
         setupExtraAboutSettings(about, version);
 

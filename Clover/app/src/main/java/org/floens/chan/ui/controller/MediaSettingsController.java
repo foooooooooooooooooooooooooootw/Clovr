@@ -149,9 +149,9 @@ public class MediaSettingsController extends SettingsController implements
                     R.string.setting_video_open_external,
                     R.string.setting_video_open_external_description));
 
-            media.add(new BooleanSettingView(this, ChanSettings.videoUseExoplayer,
-                    R.string.setting_video_exoplayer,
-                    R.string.setting_video_exoplayer_description));
+            //media.add(new BooleanSettingView(this, ChanSettings.videoUseExoplayer,
+            //        R.string.setting_video_exoplayer,
+            //        R.string.setting_video_exoplayer_description));
 
             List<ListSettingView.Item> holdSpeedItems = new ArrayList<>();
             for (ChanSettings.VideoHoldSpeedMode mode : ChanSettings.VideoHoldSpeedMode.values()) {

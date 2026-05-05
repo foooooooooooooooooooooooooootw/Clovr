@@ -47,3 +47,4 @@ $RECYCLE.BIN/
 # Mac crap
 .DS_Store
 
+Clover/decoder_vp9/src/main/jni/libvpx

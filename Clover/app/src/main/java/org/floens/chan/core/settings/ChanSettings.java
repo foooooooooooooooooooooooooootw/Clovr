@@ -53,7 +53,9 @@ public class ChanSettings {
     }
 
     public enum VideoHoldSpeedMode implements OptionSettingItem {
+        SPEED_1_25("1.25x", 1.25f),
         SPEED_1_5("1.5x", 1.5f),
+        SPEED_1_75("1.75x", 1.75f),
         SPEED_2("2x", 2.0f),
         SPEED_2_5("2.5x", 2.5f),
         SPEED_3("3x", 3.0f);
