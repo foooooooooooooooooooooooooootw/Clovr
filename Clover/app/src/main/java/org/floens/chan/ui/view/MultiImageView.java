@@ -112,6 +112,7 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
     private boolean videoError = false;
     private MediaPlayer mediaPlayer;
     private ExoPlayer exoPlayer;
+    private File currentVideoFile;
 
     private boolean backgroundToggle;
 
@@ -458,8 +459,9 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
 
             onModeLoaded(Mode.MOVIE, videoView);
         } else if (ChanSettings.videoUseExoplayer.get()) {
+            currentVideoFile = file;
             exoVideoView = new PlayerView(getContext());
-            exoVideoView.setUseController(false); // disable built-in overlay controls
+            exoVideoView.setUseController(false);
 
             exoPlayer = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(
@@ -490,25 +492,38 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                         callback.onAudioLoaded(MultiImageView.this);
                     }
                 }
+
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        checkAndHandleSingleFrameVideo();
+                    }
+                }
             });
 
-            // ---- Control bar: two rows inside a vertical LinearLayout ----
-            // Row 1: [skip back] [play/pause] [skip forward]  — centred
-            // Row 2: seekbar + time text
+            // ---- Control bar ----
+            // Row 1: [skip back] [play/pause] [skip fwd] ........... [time]
+            // Row 2: [========seekbar=====================================]
             android.widget.LinearLayout controlBar = new android.widget.LinearLayout(getContext());
             controlBar.setOrientation(android.widget.LinearLayout.VERTICAL);
             controlBar.setBackgroundColor(0xCC000000);
             controlBar.setPadding(dp(12), dp(6), dp(12), dp(10));
 
-            // -- Row 1: transport buttons --
-            android.widget.LinearLayout btnRow = new android.widget.LinearLayout(getContext());
-            btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-            btnRow.setGravity(Gravity.CENTER);
-            android.widget.LinearLayout.LayoutParams btnRowParams =
-                    new android.widget.LinearLayout.LayoutParams(
-                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
-            btnRow.setLayoutParams(btnRowParams);
+            // -- Row 1: centred buttons + right-anchored time using FrameLayout --
+            android.widget.FrameLayout btnRow = new android.widget.FrameLayout(getContext());
+            btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+
+            // Centred transport buttons
+            android.widget.LinearLayout btnGroup = new android.widget.LinearLayout(getContext());
+            btnGroup.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            btnGroup.setGravity(Gravity.CENTER_VERTICAL);
+            FrameLayout.LayoutParams btnGroupParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER);
+            btnGroup.setLayoutParams(btnGroupParams);
 
             android.widget.ImageButton skipBackBtn = new android.widget.ImageButton(getContext());
             skipBackBtn.setBackground(null);
@@ -528,47 +543,48 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
             skipFwdBtn.setColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
             skipFwdBtn.setPadding(dp(16), dp(4), dp(16), dp(4));
 
-            btnRow.addView(skipBackBtn);
-            btnRow.addView(playPauseBtn);
-            btnRow.addView(skipFwdBtn);
+            btnGroup.addView(skipBackBtn);
+            btnGroup.addView(playPauseBtn);
+            btnGroup.addView(skipFwdBtn);
 
-            // -- Row 2: seekbar + time --
-            android.widget.LinearLayout seekRow = new android.widget.LinearLayout(getContext());
-            seekRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-            seekRow.setGravity(Gravity.CENTER_VERTICAL);
-            android.widget.LinearLayout.LayoutParams seekRowParams =
-                    new android.widget.LinearLayout.LayoutParams(
-                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
-            seekRowParams.topMargin = dp(2);
-            seekRow.setLayoutParams(seekRowParams);
-
-            android.widget.SeekBar seekBar = new android.widget.SeekBar(getContext());
-            seekBar.setMax(1000);
-            android.widget.LinearLayout.LayoutParams seekBarParams =
-                    new android.widget.LinearLayout.LayoutParams(0,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            seekBarParams.setMargins(0, 0, dp(8), 0);
-            seekBar.setLayoutParams(seekBarParams);
-
+            // Time text anchored to right
             android.widget.TextView timeText = new android.widget.TextView(getContext());
             timeText.setTextColor(0xFFFFFFFF);
             timeText.setTextSize(11f);
             timeText.setText("0:00 / 0:00");
-            timeText.setMinWidth(dp(80));
-            timeText.setGravity(Gravity.END);
+            FrameLayout.LayoutParams timeParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.END | Gravity.CENTER_VERTICAL);
+            timeText.setLayoutParams(timeParams);
 
-            seekRow.addView(seekBar);
-            seekRow.addView(timeText);
+            btnRow.addView(btnGroup);
+            btnRow.addView(timeText);
+
+            // -- Row 2: full-width seekbar --
+            android.widget.SeekBar seekBar = new android.widget.SeekBar(getContext());
+            seekBar.setMax(10000); // higher resolution for precise seek
+            android.widget.LinearLayout.LayoutParams seekBarParams =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            seekBarParams.topMargin = dp(2);
+            seekBar.setLayoutParams(seekBarParams);
 
             controlBar.addView(btnRow);
-            controlBar.addView(seekRow);
+            controlBar.addView(seekBar);
 
-            // -- Button logic --
-            // Skip amount: 10% of duration, min 5s, max 30s
+            // -- Precise seek state --
+            // Holding the seekbar thumb slows seek sensitivity by 5x (like iOS scrubbing)
             java.util.concurrent.atomic.AtomicBoolean userSeeking =
                     new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean preciseSeeking =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            // Store raw finger X for precise mode
+            float[] touchDownX = {0f};
+            int[] seekStartProgress = {0};
 
+            // -- Button logic --
             playPauseBtn.setOnClickListener(v -> {
                 if (exoPlayer.isPlaying()) {
                     exoPlayer.pause();
@@ -591,21 +607,104 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                 exoPlayer.seekTo(Math.min(dur, exoPlayer.getCurrentPosition() + skip));
             });
 
+            // Precise seek: hold seekbar still for 600ms to enter precise mode (5x slower)
+            // Cancels if finger moves more than 8dp before timer fires
+            final float preciseMoveThreshold = dp(8);
+            android.os.Handler preciseSeekHandler =
+                    new android.os.Handler(android.os.Looper.getMainLooper());
+            // Debounce handler — only fires seek after finger pauses briefly
+            android.os.Handler seekDebounceHandler =
+                    new android.os.Handler(android.os.Looper.getMainLooper());
+            long[] pendingSeekMs = {-1};
+
+            seekBar.setOnTouchListener((v, event) -> {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        userSeeking.set(true);
+                        touchDownX[0] = event.getX();
+                        seekStartProgress[0] = seekBar.getProgress();
+                        // Block parent ViewPager from stealing horizontal drags
+                        seekBar.getParent().requestDisallowInterceptTouchEvent(true);
+                        preciseSeekHandler.postDelayed(() -> {
+                            if (userSeeking.get() && !preciseSeeking.get()) {
+                                preciseSeeking.set(true);
+                                touchDownX[0] = event.getX();
+                                seekStartProgress[0] = seekBar.getProgress();
+                                seekBar.performHapticFeedback(
+                                        android.view.HapticFeedbackConstants.LONG_PRESS);
+                            }
+                        }, 600);
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = event.getX() - touchDownX[0];
+                        if (!preciseSeeking.get()) {
+                            if (Math.abs(dx) > preciseMoveThreshold) {
+                                preciseSeekHandler.removeCallbacksAndMessages(null);
+                            }
+                        } else {
+                            float barWidth = seekBar.getWidth() - seekBar.getPaddingLeft()
+                                    - seekBar.getPaddingRight();
+                            int delta = (int) (dx / barWidth * seekBar.getMax() / 5f);
+                            int newProgress = Math.max(0, Math.min(seekBar.getMax(),
+                                    seekStartProgress[0] + delta));
+                            seekBar.setProgress(newProgress);
+                            if (exoPlayer.getDuration() > 0) {
+                                long seekMs = (long) newProgress * exoPlayer.getDuration()
+                                        / seekBar.getMax();
+                                pendingSeekMs[0] = seekMs;
+                                // Update time display immediately with ms precision
+                                timeText.setText(formatTimePrecise(seekMs) + " / "
+                                        + formatTime(exoPlayer.getDuration()));
+                                // Debounce actual seek — only fire after 80ms pause
+                                seekDebounceHandler.removeCallbacksAndMessages(null);
+                                seekDebounceHandler.postDelayed(() -> {
+                                    if (pendingSeekMs[0] >= 0) {
+                                        exoPlayer.seekTo(pendingSeekMs[0]);
+                                        pendingSeekMs[0] = -1;
+                                    }
+                                }, 80);
+                            }
+                            return true;
+                        }
+                        break;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        preciseSeekHandler.removeCallbacksAndMessages(null);
+                        // Fire any pending seek immediately on release
+                        seekDebounceHandler.removeCallbacksAndMessages(null);
+                        if (pendingSeekMs[0] >= 0) {
+                            exoPlayer.seekTo(pendingSeekMs[0]);
+                            pendingSeekMs[0] = -1;
+                        }
+                        // Restore time display to normal format
+                        if (preciseSeeking.get()) {
+                            long pos = exoPlayer.getCurrentPosition();
+                            timeText.setText(formatTime(pos) + " / "
+                                    + formatTime(exoPlayer.getDuration()));
+                        }
+                        userSeeking.set(false);
+                        preciseSeeking.set(false);
+                        // Re-allow parent to intercept touches
+                        seekBar.getParent().requestDisallowInterceptTouchEvent(false);
+                        break;
+                }
+                return false;
+            });
+
             seekBar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
                 @Override
-                public void onProgressChanged(android.widget.SeekBar sb, int progress, boolean fromUser) {
-                    if (fromUser && exoPlayer.getDuration() > 0) {
-                        exoPlayer.seekTo(progress * exoPlayer.getDuration() / 1000);
+                public void onProgressChanged(android.widget.SeekBar sb, int progress,
+                        boolean fromUser) {
+                    if (fromUser && !preciseSeeking.get() && exoPlayer.getDuration() > 0) {
+                        long seekMs = (long) progress * exoPlayer.getDuration() / sb.getMax();
+                        exoPlayer.seekTo(seekMs);
+                        // Update time live while dragging
+                        timeText.setText(formatTime(seekMs) + " / "
+                                + formatTime(exoPlayer.getDuration()));
                     }
                 }
-                @Override
-                public void onStartTrackingTouch(android.widget.SeekBar sb) {
-                    userSeeking.set(true);
-                }
-                @Override
-                public void onStopTrackingTouch(android.widget.SeekBar sb) {
-                    userSeeking.set(false);
-                }
+                @Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
+                @Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
             });
 
             // Periodic UI updater
@@ -618,7 +717,7 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
                         long dur = exoPlayer.getDuration();
                         long pos = exoPlayer.getCurrentPosition();
                         if (dur > 0) {
-                            seekBar.setProgress((int) (pos * 1000 / dur));
+                            seekBar.setProgress((int) (pos * seekBar.getMax() / dur));
                         }
                         timeText.setText(formatTime(pos) + " / " + formatTime(Math.max(0, dur)));
                     }
@@ -725,6 +824,93 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         }
     }
 
+    private void checkAndHandleSingleFrameVideo() {
+        if (exoPlayer == null) return;
+
+        // Walk tracks to find video and audio durations separately
+        long videoDurationUs = -1;
+        long audioDurationUs = -1;
+
+        Tracks tracks = exoPlayer.getCurrentTracks();
+        for (Tracks.Group group : tracks.getGroups()) {
+            for (int i = 0; i < group.length; i++) {
+                androidx.media3.common.Format fmt = group.getTrackFormat(i);
+                if (fmt.sampleMimeType == null) continue;
+                if (fmt.sampleMimeType.startsWith("video/")) {
+                    // Use the container-level duration as fallback
+                    videoDurationUs = exoPlayer.getDuration();
+                } else if (fmt.sampleMimeType.startsWith("audio/")) {
+                    audioDurationUs = exoPlayer.getDuration();
+                }
+            }
+        }
+
+        // Check timeline for per-stream durations via MediaMetadataRetriever on the file
+        if (currentVideoFile != null) {
+            android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+            try {
+                retriever.setDataSource(currentVideoFile.getAbsolutePath());
+                String vidDurStr = retriever.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+                // Use ffprobe-style: check if video has very short content
+                // We detect it by extracting frame at 500ms - if no video exists there, it's single-frame
+                android.graphics.Bitmap frame = retriever.getFrameAtTime(
+                        500_000, // 500ms in microseconds
+                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+
+                // Also get frame at time 0
+                android.graphics.Bitmap firstFrame = retriever.getFrameAtTime(
+                        0,
+                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+
+                if (firstFrame != null && frame == null) {
+                    // Has a frame at 0 but not at 500ms = single frame video
+                    overlayStaticFrame(firstFrame);
+                } else if (firstFrame != null) {
+                    // Double check: if both frames are identical and video duration
+                    // from container is < 1 second but player duration is much longer,
+                    // it's a single-frame with long audio
+                    long playerDur = exoPlayer.getDuration();
+                    String durStr = retriever.extractMetadata(
+                            android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
+                    if (durStr != null) {
+                        long containerDur = Long.parseLong(durStr); // in ms
+                        // If container reports long duration but video track is tiny,
+                        // getFrameAtTime deep in the file will return null
+                        android.graphics.Bitmap lateFrame = retriever.getFrameAtTime(
+                                (playerDur / 2) * 1000L,
+                                android.media.MediaMetadataRetriever.OPTION_CLOSEST);
+                        if (lateFrame == null && firstFrame != null) {
+                            overlayStaticFrame(firstFrame);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                android.util.Log.w("MultiImageView", "Single-frame check failed", e);
+            } finally {
+                try { retriever.release(); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    private void overlayStaticFrame(android.graphics.Bitmap frame) {
+        post(() -> {
+            // Hide the video surface, show static frame instead
+            if (exoVideoView != null) {
+                exoVideoView.setVisibility(View.INVISIBLE);
+            }
+            android.widget.ImageView frameView = new android.widget.ImageView(getContext());
+            frameView.setImageBitmap(frame);
+            frameView.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            frameView.setBackgroundColor(0xFF000000);
+            FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+            // Insert behind the control bar (index 1 = above video, below controls)
+            addView(frameView, 1, p);
+            android.util.Log.d("MultiImageView", "Single-frame video detected, showing static frame");
+        });
+    }
+
     private int dp(float dp) {
         return (int) (dp * getContext().getResources().getDisplayMetrics().density + 0.5f);
     }
@@ -735,6 +921,16 @@ public class MultiImageView extends FrameLayout implements View.OnClickListener,
         long minutes = seconds / 60;
         seconds = seconds % 60;
         return minutes + ":" + String.format("%02d", seconds);
+    }
+
+    private String formatTimePrecise(long ms) {
+        if (ms < 0) return "0:00.00";
+        long totalSeconds = ms / 1000;
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        long centis = (ms % 1000) / 10;
+        return minutes + ":" + String.format("%02d", seconds)
+                + "." + String.format("%02d", centis);
     }
 
     private boolean hasMediaPlayerAudioTracks(MediaPlayer mediaPlayer) {
