@@ -44,6 +44,32 @@ Open in Android Studio, or build from the command line:
 
 Last tested on Android 12. 
 
+## 🚀 Changelog
+
+### v3.1.4 — 2026-05-06
+
+- Cleaned up settings
+- Updated About section
+- Added more playback speeds
+  
+### v3.1.3 — 2026-05-05
+
+- Fixed single-frame video with audio issue
+- Updated app icon
+
+### v3.1.2 — 2026-05-04
+
+- Media3 video player migration
+- Hold-to-speed playback
+- Default theme: Yotsuba Green
+- VP9 support added
+- Gradle + SDK updates
+  
+## ⚠️ Known Issues
+
+- yuv444p color space renders incorrectly
+(codec library compilation flag issue?)
+
 ## Why This Fork Exists
 
 The original Clover is solid, but newer Android versions and modern codecs exposed limitations.
@@ -53,6 +79,10 @@ This fork aims to:
 - Keep the experience lightweight
 - Fix issues that have been bugging me for years
 - Leverage advantages of newer devices while maintaining as much compatibility as possible
+
+## ⭐ Star This Repo
+
+If this fork saved you time or fixed something annoying, consider starring it — it helps others find a working build.
 
 ## License
 
