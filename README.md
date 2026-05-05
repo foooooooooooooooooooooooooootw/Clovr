@@ -3,7 +3,7 @@
 <!-- Replace with your actual app icon path once finalized -->
 <img src="Clover/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="100" alt="Clover icon" />
 
-# Clover
+# Clovr
 
 **A 4chan imageboard reader for Android**
 
