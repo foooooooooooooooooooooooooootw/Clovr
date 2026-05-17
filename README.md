@@ -9,7 +9,7 @@
 
 Fork of [chandevel/Clover](https://github.com/chandevel/Clover)
 
-![Version](https://img.shields.io/badge/version-3.1.4-4a7c4e?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.1.5-4a7c4e?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-minSDK%2023-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)
 
@@ -19,7 +19,7 @@ Fork of [chandevel/Clover](https://github.com/chandevel/Clover)
 
 ## Features
 
-- **Modern video player** — rebuilt on Media3 with VP9 support and hold-to-speed-up playback
+- **Modern video player** — rebuilt on Media3 with VP9 support and hold-to-speed-up playback.
 - **Yotsuba Green default theme** — ships with the classic green theme out of the box
 - **Configurable media speed** — set hold-to-speed-up rates in Settings › Media
 
