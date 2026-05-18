@@ -46,6 +46,13 @@ Last tested on Android 12.
 
 ## 🚀 Changelog
 
+### v3.1.5 — 2026-05-17
+
+- ffmpegkit is now included to deal with the terrible malformatted videos users are able to create
+- I tried without it but lying to the codec and forging metadata works only on emulator, not on a phyical device
+- If a video has odd numbered dimensions then it will be transcoded before playing
+- ABI has been filtered to arm cpus. Support for 32 bit arm cpus is still available
+
 ### v3.1.4 — 2026-05-06
 
 - Cleaned up settings
